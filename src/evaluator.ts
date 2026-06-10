@@ -29,7 +29,13 @@ export function evaluateRule(input: {
   const softViolations: Violation[] = [];
   const logicTrace: any[] = [];
 
-  for (const w of ir.windows) {
+  // Defensive: a malformed/partial IR (e.g. parsed from text that produced no
+  // window clauses) may arrive with `windows` absent, null, or non-array.
+  // Treat any of those as "no windows" so Run Evaluation degrades to a legal
+  // result instead of throwing on the for-of below.
+  const windows = Array.isArray(ir.windows) ? ir.windows : [];
+
+  for (const w of windows) {
     const actual = sumFlightMinutesInWindow(scenario, w.windowDays);
     const ok = actual <= w.allowedMinutes;
     logicTrace.push({
