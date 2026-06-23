@@ -27,15 +27,23 @@ export type ParsedDSL = {
   raw: string;
 };
 
+// Archetypes the engine can actually interpret. "UNKNOWN" is a first-class
+// terminal kind: a rule whose IR we could not normalise (empty IR, or a
+// metric/shape no interpreter handles yet). It is NEVER silently treated as
+// legal — it yields status "unknown" with provenance (Law 35: no false-green).
+export type RuleKind = "CUMULATIVE_FLIGHT_TIME" | "UNKNOWN";
+
 export type RuleIR = {
   ruleId: string;
   referenceCode: string;
   severity: "HARD" | "SOFT";
-  kind: "CUMULATIVE_FLIGHT_TIME";
+  kind: RuleKind;
   // Canonicalised: minutes + days. Frozen at compile time.
   windows: Array<{ allowedMinutes: number; windowDays: number }>;
   // Soft rules carry a penalty score; HARD rules use 0.
   softPenalty: number;
+  // Set when kind === "UNKNOWN": why the rule could not be interpreted.
+  unknownReason?: string;
 };
 
 export type LogicNode =
@@ -59,8 +67,24 @@ export type Violation = {
   actualMinutes?: number;
 };
 
+// Per-rule outcome status (the canonical extension consumed by the Ops UI).
+// Mapping: hard violation → "breach", soft violation → "amber",
+// evaluated clean → "ok", could-not-evaluate → "unknown".
+export type RuleStatus = "ok" | "amber" | "breach" | "unknown";
+
+// Where a verdict came from — surfaced on expand so an operator can see that
+// an "unknown" is an honest gap, not a pass.
+export type RuleProvenance = {
+  engine: string;                 // e.g. "crew-rules-evaluator@<kind>"
+  ruleset_version?: string | null;
+  override_applied?: boolean;
+  reason?: string;                // populated for "unknown"
+};
+
 export type EvaluationResult = {
   legal: boolean;
+  status: RuleStatus;
+  provenance: RuleProvenance;
   hardViolations: Violation[];
   softViolations: Violation[];
   logicTrace: any[];
@@ -72,4 +96,8 @@ export type RulesetEvaluationResult = {
   perRule: Array<{ ruleId: string; result: EvaluationResult }>;
   hardViolations: Violation[];
   softViolations: Violation[];
+  // Un-evaluable rules MUST be visible — a caller cannot read `legal` as
+  // "all clear" while rules went un-evaluated. Surface the gap explicitly.
+  hasUnknown: boolean;
+  unknownCount: number;
 };
