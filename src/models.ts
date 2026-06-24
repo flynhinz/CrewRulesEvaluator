@@ -31,7 +31,39 @@ export type ParsedDSL = {
 // terminal kind: a rule whose IR we could not normalise (empty IR, or a
 // metric/shape no interpreter handles yet). It is NEVER silently treated as
 // legal — it yields status "unknown" with provenance (Law 35: no false-green).
-export type RuleKind = "CUMULATIVE_FLIGHT_TIME" | "UNKNOWN";
+export type RuleKind =
+  | "CUMULATIVE_FLIGHT_TIME"
+  | "FLIGHT_DUTY_PERIOD"
+  | "REST_PERIOD"
+  | "WEEKLY_REST"
+  | "UNKNOWN";
+
+// FDP interpreter params. Either a fixed cap (maxFdpMinutes) OR the EASA
+// ORO.FTL.205 Table 2 (useEasaTable) by report-local time + sector count.
+export type FdpParams = {
+  maxFdpMinutes: number | null;
+  useEasaTable: boolean;
+  reportOffsetMinutes: number; // report = first STD − this (default 60)
+  signOffMinutes: number;      // release = last on-blocks + this (default 15)
+};
+
+// Rest interpreter params. Rest = sign_off(prev duty) → sign_on(next duty).
+export type RestParams = {
+  minRestMinutes: number;
+  // "preceding_or_min": rest ≥ max(preceding duty, minRestMinutes) (ORO.FTL.235).
+  mode: "fixed" | "preceding_or_min";
+  // When set, only checked before duties of this type (e.g. STANDBY = reserve rest).
+  beforeDutyType: DutyType | null;
+  reportOffsetMinutes: number;
+  signOffMinutes: number;
+};
+
+// Weekly/cumulative rest: a continuous duty-free period of ≥ minFreeMinutes
+// must exist within any trailing windowDays window.
+export type WeeklyRestParams = {
+  windowDays: number;
+  minFreeMinutes: number;
+};
 
 export type RuleIR = {
   ruleId: string;
@@ -42,6 +74,10 @@ export type RuleIR = {
   windows: Array<{ allowedMinutes: number; windowDays: number }>;
   // Soft rules carry a penalty score; HARD rules use 0.
   softPenalty: number;
+  // Set per-kind by normalizeIr. Only the field matching `kind` is read.
+  fdp?: FdpParams;
+  rest?: RestParams;
+  weeklyRest?: WeeklyRestParams;
   // Set when kind === "UNKNOWN": why the rule could not be interpreted.
   unknownReason?: string;
 };
